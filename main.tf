@@ -8,19 +8,19 @@ variable "server_port" {
   default     = 8080
 }
 
-resource "aws_launch_configuration" "example" {
-  image_id        = "ami-0c55b159cbfafe1f0"
-  instance_type   = "t2.micro"
-  security_groups = [aws_security_group.instance.id]
+resource "aws_launch_template" "example" {
+  name_prefix   = "terraform-example-"
+  image_id      = "ami-0c55b159cbfafe1f0"
+  instance_type = "t2.micro"
 
-  user_data = <<-EOF
+  vpc_security_group_ids = [aws_security_group.instance.id]
+
+  user_data = base64encode(<<-EOF
               #!/bin/bash
               echo "Hello, World" > index.html
               nohup busybox httpd -f -p ${var.server_port} &
               EOF
-
-  # Required when using a launch configuration with an auto scaling group.
-  # https://www.terraform.io/docs/providers/aws/r/launch_configuration.html
+  )
 
   lifecycle {
     create_before_destroy = true
@@ -28,8 +28,12 @@ resource "aws_launch_configuration" "example" {
 }
 
 resource "aws_autoscaling_group" "example" {
-  launch_configuration = aws_launch_configuration.example.name
-  vpc_zone_identifier  = data.aws_subnets.default.ids
+  vpc_zone_identifier = data.aws_subnets.default.ids
+
+  launch_template {
+    id      = aws_launch_template.example.id
+    version = "$Latest"
+  }
 
   target_group_arns = [aws_lb_target_group.asg.arn]
   health_check_type = "ELB"
